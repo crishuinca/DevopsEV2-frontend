@@ -11,7 +11,9 @@ services:
       - backend-despachos
 
   backend-ventas:
-    image: ${DOCKER_USER:-tu-usuario-dockerhub}/innovatech-backend-ventas:latest
+    build:
+      context: ../DevopsEV2-backend-ventas/Springboot-API-REST
+    image: innovatech-backend-ventas:local
     ports:
       - "8081:8080"
     environment:
@@ -43,7 +45,9 @@ services:
       - innovatech-network
 
   backend-despachos:
-    image: ${DOCKER_USER:-tu-usuario-dockerhub}/innovatech-backend-despachos:latest
+    build:
+      context: ../DevopsEV2-backend-despachos/Springboot-API-REST-DESPACHO
+    image: innovatech-backend-despachos:local
     ports:
       - "8082:8081"
     environment:

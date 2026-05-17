@@ -77,9 +77,9 @@ docker-compose up -d
 
     Checkout Código: Descarga el código fuente actualizado del microservicio en el ejecutor de GitHub.
 
-    Autenticación Docker Hub: Inicio de sesión seguro utilizando secretos cifrados.
+    Autenticación Amazon ECR: Login con credenciales AWS (Learner Lab).
 
-    Build & Push: Construcción de la imagen Docker optimizada mediante la acción nativa de Docker y subida al registro con el tag :latest.
+    Build & Push: Construcción de la imagen y subida a ECR con el tag :latest.
 
     Despliegue Remoto en EC2 (SSH):
 
@@ -91,9 +91,11 @@ docker-compose up -d
 
     Secretos requeridos en el repositorio de GitHub: Para que las acciones se ejecuten correctamente, se deben registrar las siguientes variables en Settings -> Secrets and variables -> Actions:
 
-    DOCKER_USERNAME: Nombre de usuario de Docker Hub.
+    AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN: Credenciales del Learner Lab.
 
-    DOCKER_PASSWORD: Token de acceso personal o contraseña de Docker Hub.
+    AWS_REGION: Región AWS (ej. us-east-1).
+
+    ECR_REGISTRY: Salida `ecr_registry` de Terraform etapa_1.
 
     EC2_HOST: Dirección IP pública de la instancia en AWS Academy.
 
