@@ -1,0 +1,87 @@
+services:
+  frontend:
+    build: .
+    image: innovatech-frontend:local
+    ports:
+      - "80:8080"
+    networks:
+      - innovatech-network
+    depends_on:
+      - backend-ventas
+      - backend-despachos
+
+  backend-ventas:
+    build:
+      context: ../DevopsEV2-backend-ventas/Springboot-API-REST
+    image: innovatech-backend-ventas:local
+    ports:
+      - "8081:8080"
+    environment:
+      DB_HOST: db-ventas
+      DB_ENDPOINT: db-ventas
+      DB_PORT: 3306
+      DB_NAME: ventas_db
+      DB_USERNAME: root
+      DB_PASSWORD: root
+    networks:
+      - innovatech-network
+    depends_on:
+      db-ventas:
+        condition: service_healthy
+
+  db-ventas:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: ventas_db
+    volumes:
+      - ventas-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - innovatech-network
+
+  backend-despachos:
+    build:
+      context: ../DevopsEV2-backend-despachos/Springboot-API-REST-DESPACHO
+    image: innovatech-backend-despachos:local
+    ports:
+      - "8082:8081"
+    environment:
+      DB_HOST: db-despachos
+      DB_ENDPOINT: db-despachos
+      DB_PORT: 3306
+      DB_NAME: despachos_db
+      DB_USERNAME: root
+      DB_PASSWORD: root
+    networks:
+      - innovatech-network
+    depends_on:
+      db-despachos:
+        condition: service_healthy
+
+  db-despachos:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: despachos_db
+    volumes:
+      - despachos-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - innovatech-network
+
+volumes:
+  ventas-data:
+  despachos-data:
+
+networks:
+  innovatech-network:
+    driver: bridge

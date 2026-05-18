@@ -7,7 +7,7 @@ export const TableCompras = () => {
   const [ventas, setVentas] = useState([]);
 
   const compras = async () => {
-    await axios.get("http://192.168.30/api/v1/ventas", {
+    await axios.get("/api/v1/ventas", {
       headers:{
         'Content-Type': 'application/json',
         'Accept': 'application/json'
@@ -48,6 +48,14 @@ export const TableCompras = () => {
                 </tr>
               </thead>
               <tbody>
+                {ventas.filter((venta) => !venta.despachoGenerado).length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="py-10 text-gray-500">
+                      No hay órdenes pendientes de despacho. Las que ya tienen
+                      despacho asignado no se listan aquí.
+                    </td>
+                  </tr>
+                )}
                 {ventas
                   .filter((venta) => !venta.despachoGenerado)
                   .map((venta) => (
