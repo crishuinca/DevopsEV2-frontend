@@ -7,8 +7,8 @@ RUN npm install
 COPY . .
 RUN npm run build
 
-# Stage 2
-FROM nginx:alpine
+# Stage 2 — nginx sin privilegios root (puerto 8080 interno)
+FROM nginxinc/nginx-unprivileged:alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /build/dist /usr/share/nginx/html
-EXPOSE 80
+EXPOSE 8080
