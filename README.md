@@ -1,7 +1,7 @@
 # InnovaTech — Frontend (React + Nginx)
 
 **Descripción**  
-SPA en React/Vite para gestión de ventas y despachos. Se empaqueta con Docker multi-stage, se publica en **Amazon ECR** y se despliega en una **EC2 frontend** mediante GitHub Actions. Nginx hace proxy de `/api/v1/*` hacia los backends en la subred privada.
+SPA en React/Vite para gestión de ventas y despachos. Se empaqueta con Docker multi-stage, se publica en **Amazon ECR** y se despliega en **EKS** mediante el pipeline central del repo `DevopsEV2-infra`. Nginx hace proxy de `/api/v1/*` hacia los backends por DNS interno del clúster (`backend-ventas`, `backend-despachos`).
 
 ---
 
@@ -9,12 +9,11 @@ SPA en React/Vite para gestión de ventas y despachos. Se empaqueta con Docker m
 
 ```
 DevopsEV2-frontend/
-├── .github/workflows/deploy.yml
 ├── src/
 │   ├── componentes/CrudAdmin/    # Tablas y formularios
 │   └── Routes/
 ├── Dockerfile                      # node build + nginx-unprivileged
-├── nginx.conf                      # listen 8080 (local)
+├── nginx.conf                      # listen 8080; proxy a backends K8s
 ├── docker-compose.yml              # stack local front + backends + MySQL
 ├── package.json
 └── README.md
@@ -28,7 +27,7 @@ DevopsEV2-frontend/
 - Docker Compose v2
 - Node.js 20+ (solo si desarrollas sin Docker)
 - Git
-- Para despliegue AWS: Learner Lab, secrets en GitHub (ver repo `infra`)
+- Para despliegue AWS: Learner Lab, infra aplicada (`etapa_1` + `etapa_3`) y secrets en `DevopsEV2-infra`
 
 ---
 
@@ -52,11 +51,19 @@ Detener:
 docker compose down
 ```
 
-### Despliegue en AWS
+### Despliegue en AWS (EV3 — EKS)
 
-1. Infra aplicada (`infra` etapa_1 + etapa_2).
-2. Secrets configurados en GitHub (ECR, EC2, `BACKEND_HOST`).
-3. Merge o push a la rama **`deploy`** → workflow build → ECR → SSH en EC2 frontend.
+1. Infra aplicada en `DevopsEV2-infra` (`etapa_1` + `etapa_3`).
+2. Secrets AWS configurados en **DevopsEV2-infra** (no en este repo).
+3. Push a la rama **`deploy`** en **DevopsEV2-infra** → workflow `cd.yml` → build imagen → push ECR → deploy en EKS.
+
+Obtener URL pública:
+
+```bash
+kubectl get svc frontend
+```
+
+> El despliegue AWS se dispara únicamente desde **DevopsEV2-infra** (rama `deploy`).
 
 ---
 
@@ -66,21 +73,30 @@ docker compose down
 |---------|------------|---------|
 | Local | Contenedor `frontend` | Nginx sin root, puerto interno **8080**, host **80** |
 | Local | MySQL (compose) | Named volumes `ventas-data`, `despachos-data` |
-| AWS | EC2 frontend | `docker run -p 80:8080` + bind mount de `default.conf` |
-| AWS | Proxy | `/api/v1/ventas` → `BACKEND_HOST:8081`, despachos → `:8082` |
+| AWS (EKS) | Pod `frontend` | Nginx `:8080`, expuesto por Service **LoadBalancer** `:80` |
+| AWS (EKS) | Proxy | `/api/v1/ventas` → `backend-ventas:8080`, despachos → `backend-despachos:8081` |
 
-**Imagen:** `nginxinc/nginx-unprivileged:alpine` + artefactos `dist` de Vite.
+**Imagen:** `nginxinc/nginx-unprivileged:alpine` + artefactos `dist` de Vite.  
+**ECR:** `innovatech-frontend`
 
 ---
 
 ## 🧭 Diagrama de arquitectura
 
 ```
-Internet → EC2 Frontend (puerto 80)
-              ├── Nginx :8080 (SPA estática)
-              └── proxy /api → EC2 Backend (IP privada)
-                    ├── :8081 API Ventas
-                    └── :8082 API Despachos
+Internet → Service frontend (LoadBalancer :80)
+              │
+              ▼
+         Pod frontend (Nginx :8080, SPA estática)
+              ├── proxy /api/v1/ventas   → backend-ventas:8080
+              └── proxy /api/v1/despachos → backend-despachos:8081
+```
+
+```
+DevopsEV2-infra (cd.yml, rama deploy)
+        ├── checkout este repo
+        ├── docker build + push → ECR
+        └── kubectl set image deployment/frontend
 ```
 
 ---
@@ -89,24 +105,24 @@ Internet → EC2 Frontend (puerto 80)
 
 **Multi-stage build:** etapa `node:20-alpine` compila; etapa final solo Nginx + `dist`.
 
-**Usuario no-root:** imagen `nginx-unprivileged`; en EC2 se publica con `-p 80:8080`.
+**Usuario no-root:** imagen `nginx-unprivileged`; en EKS el contenedor escucha en **8080** sin privilegios root.
 
 **Volúmenes**
 
 | Tipo | Dónde | Motivo |
 |------|--------|--------|
 | **Named volume** | `docker-compose.yml` → MySQL (`ventas-data`, `despachos-data`) | Persistir datos de BD al recrear contenedores; Docker gestiona el almacenamiento. |
-| **Bind mount** | `deploy.yml` → `/home/ec2-user/nginx/default.conf` | Inyectar configuración de proxy (`BACKEND_HOST`) sin reconstruir la imagen (`:ro`). |
+| Sin volumen en EKS | Manifiesto `k8s/frontend.yml` | La SPA es stateless; la configuración de proxy va embebida en la imagen (`nginx.conf`). |
 
-**CI/CD:** push a `deploy` → build → push ECR → SSH → `docker pull` + `docker run`.
+**CI/CD (EV3):** el pipeline central en `DevopsEV2-infra` hace checkout de este repo, build, push ECR y actualiza el deployment en EKS.
 
-**Secrets:** `AWS_*`, `ECR_REGISTRY`, `EC2_HOST`, `EC2_USER`, `SSH_PRIVATE_KEY`, `BACKEND_HOST` (IP privada del backend).
+**Secrets:** solo en `DevopsEV2-infra` — `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`.
 
 ---
 
 ## 🔧 Cómo extender este proyecto
 
-- Añadir HTTPS (ACM + ALB o certificado en Nginx).
+- Añadir HTTPS (ACM + Ingress ALB).
 - Variables de entorno en build Vite (`VITE_API_URL`) para distintos ambientes.
-- Healthcheck en el contenedor y en el workflow.
-- Named volume en EC2 para logs de Nginx si se requiere auditoría.
+- Healthcheck (`livenessProbe` / `readinessProbe`) en el manifiesto K8s.
+- Aumentar réplicas del deployment frontend para alta disponibilidad.
